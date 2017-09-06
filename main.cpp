@@ -21,6 +21,29 @@ atomic<unsigned> TOP_LAYER; //the highest layer in the network
 atomic<unsigned> BOTTOM_LAYER; //the current lowest-unevaluated layer in the network
 atomic<unsigned> BOTTOM_LAYER_SPLIT_DELTA; //the distance from the bottom layer another layer must fall within before it splits the work into separate threads
 
+/*
+class ThreadHandler
+{
+private:
+    static unsigned maxThreads;
+    
+    
+public:
+    ThreadHandler(m)
+	{
+	    maxThreads = m;
+	}
+    
+    ~ThreadHandler()
+	{
+
+	}
+    void reserveThreads(unsigned count)
+	{
+
+	}
+}
+*/
 
 class Node
 {
@@ -29,23 +52,36 @@ class Node
     
 private:
     const unsigned int layer;
-    
-    unsigned char haveEvaled; //0 for not evaluated at all, 1 for evaluation finished, 2 for evaluation in progress
+
+    std::atomic<unsigned char> haveEvaled; //0 for not evaluated at all, 1 for evaluation finished, 2 for evaluation in progress
     unsigned double value;
 
     //a list of pairs where the first element is the connected node from the previous layer and the second element is the weight of their connection.
     std::list<NodePair>* prevNodes;
 
-    double eval(unsigned double value, unsigned double weight)
+    unsigned double eval(unsigned double value, unsigned double weight)
 	{
 	    return value * weight; //todo
+	}
+
+    void spawnThread(unsigned start, unsigned end, unsigned double* valuePtr, std::thread* thread)
+	{
+	    unsigned double value = *valuePtr;
+	    value = 0;
+	    thread = new std::thread([start,end,value](){
+		    for (std::list<NodePair>::iterator iter = prevNodes->begin()+start; iter < prevNodes->begin()+end; ++iter)
+		    {
+			NodePair* pair = iter;
+			value += eval(pair->first->prop(),pair->second);
+		    }
+		});
 	}
     
 public:
     Node(unsigned int l)
 	{
 	    layer = l;
-	    haveEvaled = false;
+	    haveEvaled = 0;
 	    currNodes = 0;
 	    prevNodes = new std::list<NodePair>();
 	}
@@ -54,7 +90,7 @@ public:
 	{
 	}
 
-    double prop()
+    unsigned double prop()
 	{
 	    if (haveEvaled == 1) return value;
 	    if (haveEvaled == 2) //multithreaded wait for evaluation from another thread
@@ -91,23 +127,18 @@ public:
 		unsigned double** values = new unsigned double*[numOfThreads];
 		
 		unsigned long nodeCount = prevNodes->size();
-		for (unsigned i = 0; i < numOfThreads; i++)
+		unsigned long nodesPerThread = floor(nodeCount/numOfThreads);
+		unsigned currThread = 0;
+		
+		for (unsigned long i = 0; i < nodeCount; i++)
 		{
+		    unsigned long end = i+nodesPerThread;
 		    unsigned double* tempValue = new unsigned double();
-		    values[i] = tempValue;
-		    *tempValue = 0;
-		    
-		    std::thread* thread = new std::thread([i,tempValue,nodeCount,numOfThreads](){
-			    unsigned start = i;
-			    unsigned numOfNodes = floor(nodeCount/numOfThreads);
-			    unsigned double value = *tempValue;
-			    for (std::list<NodePair>::iterator iter = prevNodes->begin()+(start*numOfNodes); iter < prevNodes->begin()+(((start+1)*numOfNodes)-1); ++iter)
-			    {
-				NodePair* pair = iter;
-				value += eval(pair->first->prop(),pair->second);
-			    }
-			});
+		    values[currThread] = tempValue;
+		    spawnThread(i,end,tempValue,threads[currThread]);
+		    currThread++;
 		}
+			
 		for (unsigned i = 0; i < numOfThreads; i++)
 		{
 		    threads[i]->join();
