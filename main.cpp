@@ -54,6 +54,8 @@ private:
     const unsigned int layer;
 
     std::atomic<unsigned char> haveEvaled; //0 for not evaluated at all, 1 for evaluation finished, 2 for evaluation in progress
+    std::atomic<bool> lock;
+    
     unsigned double value;
 
     //a list of pairs where the first element is the connected node from the previous layer and the second element is the weight of their connection.
@@ -66,13 +68,13 @@ private:
 
     void spawnThread(unsigned start, unsigned end, unsigned double* valuePtr, std::thread* thread)
 	{
-	    unsigned double value = *valuePtr;
-	    value = 0;
+	    unsigned double tempValue = *valuePtr;
+	    tempValue = 0;
 	    thread = new std::thread([start,end,value](){
 		    for (std::list<NodePair>::iterator iter = prevNodes->begin()+start; iter < prevNodes->begin()+end; ++iter)
 		    {
 			NodePair* pair = iter;
-			value += eval(pair->first->prop(),pair->second);
+			tempValue += eval(pair->first->prop(),pair->second);
 		    }
 		});
 	}
@@ -82,6 +84,7 @@ public:
 	{
 	    layer = l;
 	    haveEvaled = 0;
+	    lock = false;
 	    currNodes = 0;
 	    prevNodes = new std::list<NodePair>();
 	}
@@ -92,18 +95,16 @@ public:
 
     unsigned double prop()
 	{
-	    if (haveEvaled == 1) return value;
-	    if (haveEvaled == 2) //multithreaded wait for evaluation from another thread
+	    while(lock)
 	    {
-		//there are better ways but I don't want to bother with those right now
-		while (haveEvaled == 2)
-		{
-		    std::this_thread::yield();
-		}
+		std::this_thread::yield();
+	    }
+	    lock = true;
+	    if (haveEvaled == 1)
+	    {
+		lock = false;
 		return value;
 	    }
-	    
-	    haveEvaluated = 2;
 
 	    value = 0;
 
@@ -153,8 +154,10 @@ public:
 		    value += eval(pair->first->prop(),pair->second);
 		}
 	    }
+
 	    haveEvaluated = 1;
-		
+	    lock = false;
+	    
 	    return value;
 	}
     
