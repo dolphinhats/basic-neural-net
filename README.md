@@ -6,18 +6,20 @@ The overall plan is to have a general use Neural Net framework which will only r
 # TODO
 
 Node.h
-	- update
+	- Figure out some kind of thread management because the current method is not very practical
+
+	- Update interface given the changes to the layer class and the treeNode class
 
 
 NeuralNetLayer.h
 
 
 main.cpp
-	- odo everything
+	- Everything needed to run the neural net
 
 
 TreeNode.cpp
-	- 
+
 
 NeuralNet.h
 
