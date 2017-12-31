@@ -5,3 +5,6 @@ main:
 
 test:
 	$(CC) test.cpp
+
+readme:
+	python createReadMe.py
